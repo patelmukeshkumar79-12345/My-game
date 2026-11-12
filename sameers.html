@@ -1,0 +1,175 @@
+ 
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sameer AI</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#212121;color:#eee;font-family:Arial,sans-serif}
+.app{display:flex;height:100dvh}
+.sidebar{width:250px;background:#171717;padding:16px;display:flex;flex-direction:column;gap:15px}
+.logo{font-size:23px;font-weight:bold;padding:8px}
+button{cursor:pointer}
+.new{background:#303030;border:1px solid #555;color:white;padding:13px;border-radius:10px;text-align:left;font-size:15px}
+.history{overflow:auto;flex:1}
+.history button{display:block;width:100%;padding:11px;background:none;border:0;color:#ccc;text-align:left;border-radius:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history button:hover{background:#303030}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{padding:16px 20px;border-bottom:1px solid #383838;font-size:18px;font-weight:bold}
+.messages{flex:1;overflow-y:auto;padding:22px 16px}
+.welcome{text-align:center;margin:18vh auto 0;max-width:500px}
+.welcome h1{font-size:30px}
+.welcome p{color:#aaa}
+.msg{max-width:760px;margin:18px auto;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{background:#303030;padding:13px 17px;border-radius:18px;width:fit-content;max-width:85%;margin-left:auto}
+.ai{padding:10px 5px}
+.composer{width:calc(100% - 28px);max-width:780px;margin:10px auto 8px;background:#303030;border:1px solid #555;border-radius:18px;padding:10px;display:flex;gap:8px;align-items:end}
+textarea{flex:1;background:transparent;border:0;outline:0;color:white;resize:none;font-size:16px;padding:9px;max-height:140px}
+.send{background:white;color:#111;border:0;border-radius:12px;width:43px;height:43px;font-size:20px}
+.note{text-align:center;color:#888;font-size:11px;padding:5px 10px 12px}
+.status{color:#aaa;text-align:center;font-size:13px;padding:5px}
+@media(max-width:600px){.sidebar{width:75px;padding:8px}.logo{font-size:12px;padding:5px}.new{font-size:11px;padding:10px 4px;text-align:center}.history button{font-size:10px;padding:8px 2px}.top{padding:15px}.messages{padding:14px 10px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+<div class="logo">✦ Sameer AI</div>
+<button class="new" onclick="newChat()">＋ New Chat</button>
+<div class="history" id="history"></div>
+</aside>
+<main class="main">
+<div class="top">Sameer AI</div>
+<div class="messages" id="messages">
+<div class="welcome" id="welcome">
+<h1>नमस्ते! 👋</h1>
+<p>मैं Sameer AI हूँ। आज मैं आपकी क्या मदद कर सकता हूँ?</p>
+</div>
+</div>
+<div class="status" id="status"></div>
+<div class="composer">
+<textarea id="prompt" rows="1" placeholder="यहाँ अपना सवाल लिखें..."></textarea>
+<button class="send" id="send" onclick="sendMessage()">➤</button>
+</div>
+<div class="note">Sameer AI • AI से मिले जवाबों की जाँच जरूर करें</div>
+</main>
+</div>
+<script>
+const API_URL="http://127.0.0.1:8000/ask";
+const promptBox=document.getElementById("prompt");
+const messagesBox=document.getElementById("messages");
+const statusBox=document.getElementById("status");
+
+let chats=[];
+try{
+ chats=JSON.parse(localStorage.getItem("sameer_chats")||"[]");
+ if(!Array.isArray(chats))chats=[];
+}catch(e){chats=[]}
+
+let currentChat=null;
+let busy=false;
+
+function saveChats(){
+ localStorage.setItem("sameer_chats",JSON.stringify(chats));
+ renderHistory();
+}
+
+function newChat(){
+ currentChat=null;
+ messagesBox.innerHTML='<div class="welcome" id="welcome"><h1>नमस्ते! 👋</h1><p>मैं Sameer AI हूँ। आज मैं आपकी क्या मदद कर सकता हूँ?</p></div>';
+ statusBox.textContent="";
+}
+
+function renderHistory(){
+ const box=document.getElementById("history");
+ box.innerHTML="";
+ chats.slice().reverse().forEach(chat=>{
+  const b=document.createElement("button");
+  b.textContent=chat.title||"New Chat";
+  b.onclick=()=>openChat(chat.id);
+  box.appendChild(b);
+ });
+}
+
+function addMessage(role,content){
+ const div=document.createElement("div");
+ div.className="msg "+(role==="user"?"user":"ai");
+ div.textContent=content;
+ messagesBox.appendChild(div);
+ messagesBox.scrollTop=messagesBox.scrollHeight;
+ return div;
+}
+
+function openChat(id){
+ const chat=chats.find(c=>c.id===id);
+ if(!chat)return;
+ currentChat=chat;
+ messagesBox.innerHTML="";
+ chat.messages.forEach(m=>addMessage(m.role,m.content));
+}
+
+async function sendMessage(){
+ const question=promptBox.value.trim();
+ if(!question||busy)return;
+
+ if(!currentChat){
+  currentChat={id:Date.now(),title:question.slice(0,35),messages:[]};
+  chats.push(currentChat);
+ }
+
+ promptBox.value="";
+ promptBox.style.height="auto";
+ const welcome=document.getElementById("welcome");
+ if(welcome)welcome.remove();
+
+ currentChat.messages.push({role:"user",content:question});
+ addMessage("user",question);
+ saveChats();
+
+ busy=true;
+ statusBox.textContent="Sameer AI जवाब तैयार कर रहा है...";
+ const loading=addMessage("assistant","सोच रहा हूँ...");
+
+ try{
+  const response=await fetch(API_URL,{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({messages:currentChat.messages})
+  });
+
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||"API Error");
+  if(!data.answer)throw new Error("खाली जवाब मिला");
+
+  loading.textContent=data.answer;
+  currentChat.messages.push({role:"assistant",content:data.answer});
+  saveChats();
+
+ }catch(error){
+  loading.textContent="कनेक्शन में समस्या: "+error.message+
+  "\nPydroid Backend और Internet जाँचें।";
+ }finally{
+  busy=false;
+  statusBox.textContent="";
+  messagesBox.scrollTop=messagesBox.scrollHeight;
+ }
+}
+
+promptBox.addEventListener("keydown",e=>{
+ if(e.key==="Enter"&&!e.shiftKey){
+  e.preventDefault();
+  sendMessage();
+ }
+});
+
+promptBox.addEventListener("input",()=>{
+ promptBox.style.height="auto";
+ promptBox.style.height=Math.min(promptBox.scrollHeight,140)+"px";
+});
+
+renderHistory();
+</script>
+</body>
+</html>
