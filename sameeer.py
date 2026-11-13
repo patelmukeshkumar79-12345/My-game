@@ -1,4 +1,4 @@
-
+ 
 import os
 import json
 import urllib.request
@@ -7,7 +7,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 API_KEY = os.environ.get("GROQ_API_KEY", "")
 PORT = int(os.environ.get("PORT", 8000))
-
 
 class SameerAI(BaseHTTPRequestHandler):
 
@@ -31,11 +30,15 @@ class SameerAI(BaseHTTPRequestHandler):
 
         try:
             if not API_KEY:
-                self.send_json({"error": "GROQ_API_KEY missing"}, 500)
+                self.send_json(
+                    {"error": "GROQ_API_KEY missing in Render"},
+                    500
+                )
                 return
 
             length = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(length))
+
             messages = data.get("messages", [])
 
             if not messages:
@@ -58,15 +61,18 @@ class SameerAI(BaseHTTPRequestHandler):
                 data=json.dumps(payload).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer " + API_KEY
+                    "Authorization": "Bearer " + API_KEY,
+                    "User-Agent": "SameerAI/1.0",
+                    "Accept": "application/json"
                 },
                 method="POST"
             )
 
             with urllib.request.urlopen(req, timeout=90) as response:
-                result = json.loads(response.read())
+                result = json.loads(response.read().decode("utf-8"))
 
             answer = result["choices"][0]["message"]["content"]
+
             self.send_json({"answer": answer})
 
         except urllib.error.HTTPError as e:
@@ -81,5 +87,7 @@ class SameerAI(BaseHTTPRequestHandler):
 
 
 print("Sameer AI Backend Starting on port", PORT)
+
 HTTPServer(("0.0.0.0", PORT), SameerAI).serve_forever()
+
 
